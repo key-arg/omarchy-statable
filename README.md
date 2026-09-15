@@ -11,14 +11,11 @@ the widget holds no state and runs no daemon.
 
 - Omarchy with the Quickshell bar — the one that reads `~/.config/omarchy/shell.json`.
 - The [`statable`](https://github.com/key-arg/statable-cli) CLI on the shell's
-  `PATH`, signed in to an account:
+  `PATH`, signed in to an account. Install it from its
+  [releases page](https://github.com/key-arg/statable-cli/releases) or with a Go
+  toolchain — see the CLI's README — then:
 
   ```bash
-  # install: pick the archive for your machine from the releases page
-  #   https://github.com/key-arg/statable-cli/releases
-  # or, on a system with Go:
-  go install github.com/key-arg/statable-cli/cmd/statable@latest
-
   statable auth login          # paste an API key with the read scope
   statable sites use example.com
   ```
