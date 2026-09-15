@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "com.statable.now",
+  "name": "Statable visitors",
+  "version": "0.1.0",
+  "author": "Statable",
+  "license": "MIT",
+  "description": "Live visitor count from Statable analytics in the Omarchy bar.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "Widget.qml" },
+  "barWidget": {
+    "displayName": "Statable visitors",
+    "description": "Visitors active right now, polled from the statable CLI.",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 60,
+      "site": "",
+      "showIcon": true
+    },
+    "schema": [
+      {
+        "key": "site",
+        "type": "string",
+        "label": "Site (domain or id; blank uses the CLI default)",
+        "defaultValue": ""
+      },
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 15,
+        "max": 3600,
+        "step": 15,
+        "defaultValue": 60
+      },
+      {
+        "key": "showIcon",
+        "type": "boolean",
+        "label": "Show the visitors icon",
+        "defaultValue": true
+      }
+    ]
+  }
+}
