@@ -60,6 +60,14 @@ poll still running when the next tick arrives is skipped rather than stacked.
 Middle-click re-polls immediately. The panel can also be summoned by script:
 `omarchy-shell com.statable.now toggle`.
 
+## Remove
+
+```bash
+omarchy plugin remove com.statable.now
+```
+
+That deletes the plugin's folder under `~/.config/omarchy/plugins/` and its entry in `shell.json`. Nothing else is touched.
+
 ## Licence
 
 MIT. The widget is unsandboxed QML that runs inside `omarchy-shell`, like every
