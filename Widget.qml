@@ -19,7 +19,7 @@ Panel {
   id: root
   moduleName: "com.statable.now"
   ipcTarget: "com.statable.now"
-  manageIpc: false
+  manageIpc: true
 
   readonly property int refreshIntervalSec: Math.max(15, setting("refreshIntervalSec", 60))
   readonly property string site: setting("site", "")

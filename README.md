@@ -1,10 +1,11 @@
 # Statable visitors — an Omarchy bar widget
 
-The number of visitors active on your site right now, in the [Omarchy](https://omarchy.org)
-bar. It polls the [`statable`](https://github.com/key-arg/statable-cli) CLI, which prints
-one figure and exits, so the widget holds no state and runs no daemon.
+Visitors on your site in the [Omarchy](https://omarchy.org) bar: a live count as a
+pill, and the last seven days when you click it. It polls the
+[`statable`](https://github.com/key-arg/statable-cli) CLI, which prints and exits, so
+the widget holds no state and runs no daemon.
 
-![the pill in the bar](docs/bar.png)
+![the popup panel: site and live count, last 7 days with change against the previous week, and top pages](docs/panel.png)
 
 ## Requires
 
@@ -46,13 +47,18 @@ section of `~/.config/omarchy/shell.json`:
 
 ## Behaviour
 
-The pill shows a number only when `statable now` exits cleanly. No key, no
-default site, the API unreachable, or the binary missing from `PATH` — each
-leaves the pill blank rather than showing a wrong or stale figure. The poll
-runs off the bar's UI thread, so a slow call never freezes the bar, and a poll
-still running when the next tick arrives is skipped rather than stacked.
+The pill shows a number only when `statable now` exits cleanly. Clicking it opens
+a panel with the last seven days — visitors, pageviews, bounce rate and average
+visit, each against the previous week — and the top pages; those are fetched when
+the panel opens and on the same timer while it stays open.
 
-Middle-click re-polls immediately.
+No key, no default site, the API unreachable, or the binary missing from `PATH` —
+each leaves that part blank rather than showing a wrong or stale figure. Every
+call runs off the bar's UI thread, so a slow one never freezes the bar, and a
+poll still running when the next tick arrives is skipped rather than stacked.
+
+Middle-click re-polls immediately. The panel can also be summoned by script:
+`omarchy-shell com.statable.now toggle`.
 
 ## Licence
 
