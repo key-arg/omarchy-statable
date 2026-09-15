@@ -30,7 +30,12 @@ Panel {
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   // nf-fa-users, nf-fa-eye — the bar font is a Nerd Font.
-  readonly property string usersGlyph: ""
+  readonly property string usersGlyph: "\uf0c0"
+
+  // The bar draws the "panel is open" mark at this width/height; without it
+  // the default is a short stub under a wide pill. Span the pill instead.
+  readonly property real openPanelIndicatorWidth: button.implicitWidth
+  readonly property real openPanelIndicatorHeight: Math.max(Style.space(2), Math.round(Style.bar.iconSlot * 0.12))
 
   // Pill state (the `now` count).
   property string nowCount: ""
