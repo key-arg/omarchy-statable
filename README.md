@@ -54,6 +54,12 @@ each leaves that part blank rather than showing a wrong or stale figure. Every
 call runs off the bar's UI thread, so a slow one never freezes the bar, and a
 poll still running when the next tick arrives is skipped rather than stacked.
 
+Every call is bounded: 15 seconds and 64 KiB of output, after which the
+process is killed and its output dropped. What does come back is checked
+before it is shown — the count must be digits, the figures finite numbers, the
+top pages at most five with paths cut at 200 characters — and every value from
+the API is rendered as plain text, never as rich text.
+
 Middle-click re-polls immediately. The panel can also be summoned by script:
 `omarchy-shell com.statable.now toggle`.
 

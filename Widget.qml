@@ -13,8 +13,11 @@ import qs.Ui
 // command prints and exits, so the widget holds no long-running state and no
 // daemon. Any non-zero exit — no key, no default site, the API unreachable,
 // the binary off PATH — leaves that part blank rather than showing a wrong or
-// stale figure. The processes run off the UI thread, so a slow call never
-// freezes the bar, and an overlapping poll is skipped rather than stacked.
+// stale figure. Each call has a deadline and an output cap (see Fetch), what
+// it returns is validated before it is shown, and every value from the API
+// is rendered as plain text. The processes run off the UI thread, so a slow
+// call never freezes the bar, and an overlapping poll is skipped rather than
+// stacked.
 Panel {
   id: root
   moduleName: "com.statable.now"
@@ -45,19 +48,21 @@ Panel {
   property var stats: null
   property var pages: []
 
+  // Bounds on what a CLI call may hand back. The CLI prints a few hundred
+  // bytes and exits; a call that runs past the deadline or past the output
+  // cap is killed and its output dropped, so a stalled or runaway response
+  // can neither keep a process alive nor grow inside the shell.
+  readonly property int fetchDeadlineMs: 15000
+  readonly property int fetchCapChars: 65536
+  readonly property int maxPages: 5
+  readonly property int maxPathChars: 200
+
   function withSite(base) {
     return root.site === "" ? base : base.concat(["--site", root.site])
   }
 
-  function pollNow() {
-    if (!nowProc.running) nowProc.running = true
-  }
-
-  function loadPanel() {
-    if (!statsProc.running) statsProc.running = true
-    if (!pagesProc.running) pagesProc.running = true
-  }
-
+  function pollNow() { nowF.start() }
+  function loadPanel() { statsF.start(); pagesF.start() }
   function refresh() {
     pollNow()
     if (root.opened) loadPanel()
@@ -73,72 +78,112 @@ Panel {
     onTriggered: root.refresh()
   }
 
-  Process {
-    id: nowProc
+  // One `statable` call, bounded: a deadline, a cap on stdout while it
+  // streams, and SIGKILL when either trips. `done` reports ok only for a
+  // clean exit within both bounds, and the text is empty otherwise. A call
+  // already running is not started again.
+  component Fetch: Item {
+    id: fetch
+    property var command: []
+    property string buf: ""
+    property bool tripped: false
+    signal done(bool ok, string text)
+    function start() { if (!proc.running) proc.running = true }
+    function trip() { fetch.tripped = true; proc.signal(9) }
+    Process {
+      id: proc
+      command: fetch.command
+      stdout: SplitParser {
+        splitMarker: ""   // every chunk as it arrives, not whole lines
+        onRead: function (data) {
+          if (fetch.tripped) return
+          fetch.buf += data
+          if (fetch.buf.length > root.fetchCapChars) fetch.trip()
+        }
+      }
+      onStarted: { fetch.buf = ""; fetch.tripped = false; deadline.restart() }
+      onExited: function (code) {
+        deadline.stop()
+        var ok = code === 0 && !fetch.tripped
+        var text = fetch.buf
+        fetch.buf = ""
+        fetch.done(ok, ok ? text : "")
+      }
+    }
+    Timer { id: deadline; interval: root.fetchDeadlineMs; onTriggered: fetch.trip() }
+  }
+
+  // ---- what comes back is checked before it is shown ----
+  function asCount(s) {                       // digits only, else "no data"
+    var t = String(s || "").trim()
+    return /^\d{1,12}$/.test(t) ? t : ""
+  }
+  function asNum(v) {                         // finite, non-negative, or null
+    var n = Number(v)
+    return (isFinite(n) && n >= 0 && n <= 1e12) ? n : null
+  }
+  function asChange(v) {                      // finite percent change, or null
+    if (v === undefined || v === null) return null
+    var n = Number(v)
+    return (isFinite(n) && Math.abs(n) <= 1e6) ? n : null
+  }
+  function asText(v, max) {
+    return String(v === undefined || v === null ? "" : v).slice(0, max)
+  }
+
+  Fetch {
+    id: nowF
     command: root.withSite(["statable", "now"])
-    stdout: StdioCollector {
-      id: nowOut
-      waitForEnd: true
-    }
-    onExited: function (code) {
-      if (code === 0) {
-        root.nowCount = String(nowOut.text || "").trim()
-        root.nowOk = root.nowCount !== ""
-      } else {
-        root.nowCount = ""
-        root.nowOk = false
-      }
+    onDone: function (ok, text) {
+      root.nowCount = ok ? root.asCount(text) : ""
+      root.nowOk = root.nowCount !== ""
     }
   }
 
-  Process {
-    id: statsProc
+  Fetch {
+    id: statsF
     command: root.withSite(["statable", "stats", "--range", "7d", "--compare", "previous", "--format", "json"])
-    stdout: StdioCollector {
-      id: statsOut
-      waitForEnd: true
-    }
-    onExited: function (code) {
-      if (code === 0) {
-        try {
-          root.stats = JSON.parse(String(statsOut.text || ""))
-        } catch (e) {
-          root.stats = null
-        }
-      } else {
-        root.stats = null
+    onDone: function (ok, text) {
+      var s = null
+      try { if (ok) s = JSON.parse(text) } catch (e) { s = null }
+      if (!s || typeof s !== "object" || Array.isArray(s)) { root.stats = null; return }
+      root.stats = {
+        visitors: root.asNum(s.visitors), visitors_change: root.asChange(s.visitors_change),
+        pageviews: root.asNum(s.pageviews), pageviews_change: root.asChange(s.pageviews_change),
+        bounce_rate: root.asNum(s.bounce_rate), bounce_rate_change: root.asChange(s.bounce_rate_change),
+        visit_duration: root.asNum(s.visit_duration), visit_duration_change: root.asChange(s.visit_duration_change)
       }
     }
   }
 
-  Process {
-    id: pagesProc
-    command: root.withSite(["statable", "top", "pages", "--range", "7d", "--limit", "5", "--format", "json"])
-    stdout: StdioCollector {
-      id: pagesOut
-      waitForEnd: true
-    }
-    onExited: function (code) {
-      if (code === 0) {
-        try {
-          var a = JSON.parse(String(pagesOut.text || ""))
-          root.pages = Array.isArray(a) ? a : []
-        } catch (e) {
-          root.pages = []
-        }
-      } else {
-        root.pages = []
+  Fetch {
+    id: pagesF
+    command: root.withSite(["statable", "top", "pages", "--range", "7d", "--limit", String(root.maxPages), "--format", "json"])
+    onDone: function (ok, text) {
+      var a = []
+      try { if (ok) a = JSON.parse(text) } catch (e) { a = [] }
+      if (!Array.isArray(a)) a = []
+      var out = []
+      for (var i = 0; i < a.length && out.length < root.maxPages; i++) {
+        var p = a[i]
+        if (!p || typeof p !== "object") continue
+        var n = root.asNum(p.visitors)
+        if (n === null) continue
+        out.push({ page: root.asText(p.page, root.maxPathChars), visitors: n })
       }
+      root.pages = out
     }
   }
 
   // ---- formatting helpers ----
   function fmtInt(n) {
+    if (n === null || n === undefined) return "—"
     // Thousands with a thin space, matching the CLI's human output.
     var s = String(Math.round(n))
     return s.replace(/\B(?=(\d{3})+(?!\d))/g, " ")
   }
   function fmtDuration(secs) {
+    if (secs === null || secs === undefined) return "—"
     var s = Math.round(secs)
     var m = Math.floor(s / 60)
     var r = s % 60
@@ -160,7 +205,7 @@ Panel {
     return [
       { label: "Visitors", value: fmtInt(s.visitors), delta: fmtDelta(s.visitors_change) },
       { label: "Pageviews", value: fmtInt(s.pageviews), delta: fmtDelta(s.pageviews_change) },
-      { label: "Bounce rate", value: Math.round(s.bounce_rate) + "%", delta: fmtDelta(s.bounce_rate_change) },
+      { label: "Bounce rate", value: s.bounce_rate === null ? "—" : Math.round(s.bounce_rate) + "%", delta: fmtDelta(s.bounce_rate_change) },
       { label: "Avg visit", value: fmtDuration(s.visit_duration), delta: fmtDelta(s.visit_duration_change) }
     ]
   }
@@ -218,6 +263,7 @@ Panel {
           spacing: Style.space(2)
           Text {
             text: root.site !== "" ? root.site : "Statable"
+            textFormat: Text.PlainText
             color: root.fg
             font.family: root.fontFamily
             font.pixelSize: Style.font.heading
@@ -229,6 +275,7 @@ Panel {
             text: root.nowOk
                   ? (root.nowCount + " visitor" + (root.nowCount === "1" ? "" : "s") + " active now")
                   : "no data"
+            textFormat: Text.PlainText
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -263,6 +310,7 @@ Panel {
                 anchors.right: rowDelta.left
                 anchors.rightMargin: Style.space(8)
                 text: modelData.value
+                textFormat: Text.PlainText
                 color: root.fg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
@@ -308,6 +356,7 @@ Panel {
                 anchors.right: pgCount.left
                 anchors.rightMargin: Style.space(8)
                 text: modelData.page
+                textFormat: Text.PlainText
                 color: root.fg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "com.statable.now",
   "name": "Statable visitors",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Statable",
   "license": "MIT",
   "description": "Live visitor count from Statable analytics in the Omarchy bar.",
